@@ -2,18 +2,20 @@
  * Manage downloads
  */
 
-
 (function() {
 
 var cache = {};
 var form = $('form');
 var minified = true;
 
+var dependencies = {};
+
 for (var category in components) {
 	var all = components[category];
 	
 	all.meta.section = $u.element.create('section', {
 		className: 'options',
+		id: 'category-' + category,
 		contents: {
 			tag: 'h1',
 			contents: category.charAt(0).toUpperCase() + category.slice(1)
@@ -38,8 +40,10 @@ for (var category in components) {
 		
 		var info = all[id] = {
 			title: all[id].title || all[id],
-			hasCSS: all[id].hasCSS !== undefined? all[id].hasCSS : all.meta.hasCSS,
+			noCSS: all[id].noCSS || all.meta.noCSS,
+			noJS: all[id].noJS || all.meta.noJS,
 			enabled: checked,
+			require: all[id].require,
 			files: {
 				minified: {
 					paths: [],
@@ -52,12 +56,17 @@ for (var category in components) {
 			}
 		};
 		
-		if (!/\.css$/.test(filepath)) {
+		if (info.require) {
+			dependencies[info.require] = (dependencies[info.require] || []).concat(id);
+		}
+
+		if (!all[id].noJS && !/\.css$/.test(filepath)) {
 			info.files.minified.paths.push(filepath.replace(/(\.js)?$/, '.min.js'));
 			info.files.dev.paths.push(filepath.replace(/(\.js)?$/, '.js'));
 		}
 		
-		if ((all[id].hasCSS && !/\.js$/.test(filepath)) || /\.css$/.test(filepath)) {
+
+		if ((!all[id].noCSS && !/\.js$/.test(filepath)) || /\.css$/.test(filepath)) {
 			var cssFile = filepath.replace(/(\.css)?$/, '.css');
 			
 			info.files.minified.paths.push(cssFile);
@@ -82,6 +91,22 @@ for (var category in components) {
 								$$('input[name="' + this.name + '"]').forEach(function(input) {
 									all[input.value].enabled = input.checked;
 								});
+
+								if (all[id].require && this.checked) {
+									var input = $('label[data-id="' + all[id].require + '"] > input');
+									input.checked = true;
+									
+									input.onclick();
+								}
+
+								if (dependencies[id] && !this.checked) { // It’s required by others
+									dependencies[id].forEach(function(dependent) {
+										var input = $('label[data-id="' + dependent + '"] > input');
+										input.checked = false;
+
+										input.onclick();
+									});
+								}
 								
 								update(category, id);
 							};
@@ -236,7 +261,7 @@ function generateCode(){
 					if (cache[path]) {
 						var type = path.match(/\.(\w+)$/)[1];
 						
-						code[type] += cache[path].contents + '\n';
+						code[type] += cache[path].contents + (type === 'js'? ';' : '') + '\n';
 					}
 				});
 			}
